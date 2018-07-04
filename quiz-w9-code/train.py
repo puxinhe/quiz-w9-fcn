@@ -84,6 +84,60 @@ upsampled_logits_shape = tf.stack([
                                   downsampled_logits_shape[3]
                                   ])
 
+
+
+
+pool3_feature = end_points['vgg_16/pool3']
+pool4_feature = end_points['vgg_16/pool4']
+
+with tf.variable_scope('vgg_16/fc8'):
+    aux_logits_8s = slim.conv2d(pool3_feature, number_of_classes, [1, 1],
+                                 activation_fn=None,
+                                 weights_initializer=tf.zeros_initializer,
+                                 scope='conv_pool3')
+
+    aux_logits_16s = slim.conv2d(pool4_feature, number_of_classes, [1, 1],
+                                 activation_fn=None,
+                                 weights_initializer=tf.zeros_initializer,
+                                 scope='conv_pool4')
+
+# Perform the upsampling
+
+upsample_filter_np_x2 = bilinear_upsample_weights(2,  # upsample_factor,
+                                                  number_of_classes)
+
+upsample_filter_tensor_x2 = tf.Variable(upsample_filter_np_x2, name='vgg_16/fc8/t_conv_x2')
+
+upsampled_logits = tf.nn.conv2d_transpose(logits, upsample_filter_tensor_x2,
+                                          output_shape=tf.shape(aux_logits_16s),
+                                          strides=[1, 2, 2, 1],
+                                          padding='SAME')
+
+
+upsampled_logits = upsampled_logits + aux_logits_16s
+
+upsample_filter_np_x4 = bilinear_upsample_weights(2,  # upsample_factor,
+                                                  number_of_classes)
+
+upsample_filter_tensor_x4 = tf.Variable(upsample_filter_np_x4, name='vgg_16/fc8/t_conv_x4')
+
+upsampled_logits = tf.nn.conv2d_transpose(upsampled_logits, upsample_filter_tensor_x4,
+                                          output_shape=tf.shape(aux_logits_8s),
+                                          strides=[1, 2, 2, 1],
+                                          padding='SAME')
+
+upsampled_logits = upsampled_logits + aux_logits_8s
+
+upsample_filter_np_x8 = bilinear_upsample_weights(upsample_factor,
+                                                   number_of_classes)
+
+upsample_filter_tensor_x8 = tf.Variable(upsample_filter_np_x8, name='vgg_16/fc8/t_conv_x8')
+upsampled_logits = tf.nn.conv2d_transpose(upsampled_logits, upsample_filter_tensor_x8,
+                                          output_shape=upsampled_logits_shape,
+                                          strides=[1, upsample_factor, upsample_factor, 1],
+                                          padding='SAME')
+
+'''
 #从vgg_16中的endpoints['vgg_16/pool4']中取出feature maps,然后再通过一个1x1的卷积对feature maps做
 #一个21分类处理，初始化用的是zeros_initializer,所以输出的结果不会有任何改变,赋值到aux_logits_16s，结果是32x22x21
 pool4_feature = end_points['vgg_16/pool4']
@@ -135,7 +189,7 @@ upsampled_logits = tf.nn.conv2d_transpose(upsampled_logits, upsample_filter_tens
                                  strides=[1, upsample_factor, upsample_factor, 1],
                                          padding='SAME')
 										 
-'''
+
 upsample_filter_np_x16 = bilinear_upsample_weights(upsample_factor,
                                                    number_of_classes)
 
